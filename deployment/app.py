@@ -69,6 +69,36 @@ RFM = pd.DataFrame([
 CONFUSION = np.array([[65, 10], [16, 59]])
 LABELS = ["Retained", "Churned"]
 
+# ── Deep Learning Data ───────────────────────────────────────────────────────
+
+DL_OVERVIEW = {
+    "totalRows": 90528,
+    "trainRows": 72422,
+    "testRows": 18106,
+    "features": 20,
+    "churnRate": 45.41,
+}
+
+DL_MODELS = pd.DataFrame([
+    {"Model": "ANN (thresh=0.50)", "Architecture": "ANN", "AUC": 0.7621, "Accuracy": 0.6831, "Precision": 0.6212, "Recall": 0.7744, "F1": 0.6894},
+    {"Model": "ANN (thresh=0.43)", "Architecture": "ANN", "AUC": 0.7621, "Accuracy": 0.6530, "Precision": 0.5764, "Recall": 0.8896, "F1": 0.6995},
+    {"Model": "CNN (thresh=0.50)", "Architecture": "CNN", "AUC": 0.7656, "Accuracy": 0.6850, "Precision": 0.6324, "Recall": 0.7316, "F1": 0.6784},
+    {"Model": "XGBoost+RFE (NB4)", "Architecture": "ML",  "AUC": 0.8400, "Accuracy": 0.7617, "Precision": 0.7286, "Recall": 0.7613, "F1": 0.7440},
+])
+
+ANN_FEATURES = pd.DataFrame([
+    {"Feature": "freight_value",           "Importance": 0.1202},
+    {"Feature": "delivered_estimated",     "Importance": 0.1118},
+    {"Feature": "purchased_delivered",     "Importance": 0.1025},
+    {"Feature": "purchased_approved",      "Importance": 0.0619},
+    {"Feature": "geolocation_lat",         "Importance": 0.0387},
+    {"Feature": "product_weight_g",        "Importance": 0.0330},
+    {"Feature": "payment_type_credit_card","Importance": 0.0321},
+    {"Feature": "Monetary",                "Importance": 0.0277},
+    {"Feature": "geolocation_lng",         "Importance": 0.0226},
+    {"Feature": "price",                   "Importance": 0.0200},
+])
+
 COLORS = {
     "blue":   "#0079F2",
     "purple": "#795EFF",
@@ -76,6 +106,8 @@ COLORS = {
     "red":    "#A60808",
     "pink":   "#ec4899",
     "grey":   "#a0aec0",
+    "teal":   "#0d9488",
+    "orange": "#f97316",
 }
 COLOR_LIST = [COLORS["blue"], COLORS["purple"], COLORS["green"], COLORS["red"], COLORS["pink"]]
 GROUP_COLORS = {"Tuned": COLORS["blue"], "RFE": COLORS["purple"], "Baseline": COLORS["grey"]}
@@ -83,7 +115,7 @@ GROUP_COLORS = {"Tuned": COLORS["blue"], "RFE": COLORS["purple"], "Baseline": CO
 # ── Header ───────────────────────────────────────────────────────────────────
 
 st.title("📊 Olist Churn Prediction Dashboard")
-st.caption("Brazilian E-Commerce · RFM Analysis · ML Model Comparison · Balanced 50/50 · 80/20 Split")
+st.caption("Brazilian E-Commerce · RFM Analysis · ML Model Comparison · Deep Learning (ANN & CNN) · Balanced 50/50 · 80/20 Split")
 st.divider()
 
 # ── KPI Row ───────────────────────────────────────────────────────────────────
@@ -92,12 +124,10 @@ k1, k2, k3, k4 = st.columns(4)
 k1.metric("Total Orders (After Clean)", f"{OVERVIEW['totalRows']:,}", help="After merge & preprocessing")
 k2.metric("Balanced Dataset",           f"{OVERVIEW['balancedRows']:,}",
           f"{OVERVIEW['churnedRows']} churned + {OVERVIEW['retainedRows']} retained")
-k3.metric("Best Model AUC",             "0.8267",    "Tuned XGBoost")
+k3.metric("Best ML Model AUC",          "0.8267",    "Tuned XGBoost")
 k4.metric("Original Churn Rate",        "97%",       "Frequency = 1 customer", delta_color="inverse")
 
 st.divider()
-
-# ── Tabs ──────────────────────────────────────────────────────────────────────
 
 # ── Model loading ─────────────────────────────────────────────────────────────
 
@@ -155,12 +185,13 @@ def predict_churn(freight_value, carrier_delivered, payment_value, approved_carr
     score += 0.022 * min(purchased_delivered / 25, 1.0)
     return float(1 / (1 + np.exp(-8 * score)))
 
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
     "🔮 Predict Customer",
     "🏆 Model Comparison",
     "🔀 Feature Importance",
     "🧩 Confusion Matrix",
     "👥 RFM Segments",
+    "🧠 Deep Learning",
     "📋 Pipeline Summary",
 ])
 
@@ -473,9 +504,175 @@ with tab5:
         "Only 5% qualify as Champions."
     )
 
-# ── Tab 6: Pipeline Summary ────────────────────────────────────────────────────
+# ── Tab 6: Deep Learning ──────────────────────────────────────────────────────
 
 with tab6:
+    st.subheader("🧠 Deep Learning for Churn Prediction — ANN & CNN")
+    st.caption("Notebook 05 · TensorFlow/Keras · Full dataset (no balancing) · Class weights · 80/20 split")
+
+    # KPIs
+    dl_k1, dl_k2, dl_k3, dl_k4 = st.columns(4)
+    dl_k1.metric("Full Dataset", f"{DL_OVERVIEW['totalRows']:,}", "rows × 20 features")
+    dl_k2.metric("Training Samples", f"{DL_OVERVIEW['trainRows']:,}", "80% stratified")
+    dl_k3.metric("Best DL AUC", "0.7656", "CNN (thresh=0.50)")
+    dl_k4.metric("Class Distribution", "54.6% / 45.4%", "Not Churned / Churned")
+
+    st.divider()
+
+    # ── Architecture Cards ────────────────────────────────────────────────────
+    st.subheader("Model Architectures")
+    arch_col1, arch_col2 = st.columns(2)
+
+    with arch_col1:
+        st.markdown("#### 🔷 ANN (Artificial Neural Network)")
+        st.markdown("""
+| Layer | Output Shape | Params |
+|---|---|---|
+| Input | (None, 20) | — |
+| Dense(64, ReLU) | (None, 64) | 1,344 |
+| BatchNormalization | (None, 64) | 256 |
+| Dropout(0.3) | (None, 64) | 0 |
+| Dense(32, ReLU) | (None, 32) | 2,080 |
+| BatchNormalization | (None, 32) | 128 |
+| Dropout(0.3) | (None, 32) | 0 |
+| Dense(1, Sigmoid) | (None, 1) | 33 |
+        """)
+        st.info("**Total params:** 3,841 · **Optimizer:** Adam (lr=1e-3) · **Loss:** Binary Cross-Entropy")
+
+    with arch_col2:
+        st.markdown("#### 🔶 CNN (1D Convolutional Neural Network)")
+        st.markdown("""
+| Layer | Output Shape | Params |
+|---|---|---|
+| Input | (None, 20, 1) | — |
+| Conv1D(32, k=3, ReLU) | (None, 20, 32) | 128 |
+| BatchNormalization | (None, 20, 32) | 128 |
+| MaxPooling1D(2) | (None, 10, 32) | 0 |
+| Conv1D(64, k=3, ReLU) | (None, 10, 64) | 6,208 |
+| BatchNormalization | (None, 10, 64) | 256 |
+| MaxPooling1D(2) | (None, 5, 64) | 0 |
+| Flatten | (None, 320) | 0 |
+| Dense(64, ReLU) | (None, 64) | 20,544 |
+| Dropout(0.5) | (None, 64) | 0 |
+| Dense(1, Sigmoid) | (None, 1) | 65 |
+        """)
+        st.info("**Total params:** 27,329 · **Optimizer:** Adam (lr=1e-3) · **Loss:** Binary Cross-Entropy")
+
+    st.divider()
+
+    # ── Callbacks info ────────────────────────────────────────────────────────
+    st.subheader("Training Configuration")
+    cb_col1, cb_col2, cb_col3 = st.columns(3)
+    cb_col1.metric("Early Stopping", "patience=10", "monitors val AUC")
+    cb_col2.metric("ReduceLROnPlateau", "factor=0.5", "patience=5, min_lr=1e-6")
+    cb_col3.metric("Max Epochs", "100", "best weights restored")
+
+    st.divider()
+
+    # ── Performance comparison ────────────────────────────────────────────────
+    st.subheader("Performance Comparison — DL vs Best ML")
+
+    metrics = ["AUC", "Accuracy", "Precision", "Recall", "F1"]
+    arch_palette = {
+        "ANN": COLORS["blue"],
+        "CNN": COLORS["teal"],
+        "ML":  COLORS["orange"],
+    }
+
+    fig_dl_bar = go.Figure()
+    for _, row in DL_MODELS.iterrows():
+        fig_dl_bar.add_trace(go.Bar(
+            name=row["Model"],
+            x=metrics,
+            y=[row[m] for m in metrics],
+            marker_color=arch_palette.get(row["Architecture"], COLORS["grey"]),
+            text=[f"{row[m]:.3f}" for m in metrics],
+            textposition="outside",
+            hovertemplate=f"<b>{row['Model']}</b><br>%{{x}}: %{{y:.4f}}<extra></extra>",
+        ))
+    fig_dl_bar.update_layout(
+        barmode="group",
+        height=420,
+        margin=dict(l=0, r=0, t=20, b=0),
+        yaxis=dict(range=[0, 0.98], title="Score"),
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+        font=dict(size=12),
+        legend=dict(orientation="h", yanchor="bottom", y=-0.25, xanchor="center", x=0.5),
+    )
+    st.plotly_chart(fig_dl_bar, use_container_width=True)
+
+    # Full results table
+    st.subheader("Full DL Results Table")
+    dl_display = DL_MODELS.drop(columns=["Architecture"]).copy()
+    dl_display.columns = ["Model", "AUC ↑", "Accuracy ↑", "Precision ↑", "Recall ↑", "F1 Score ↑"]
+    st.dataframe(
+        dl_display.style
+            .format({c: "{:.4f}" for c in dl_display.columns if c != "Model"})
+            .highlight_max(subset=["AUC ↑", "Accuracy ↑", "Precision ↑", "Recall ↑", "F1 Score ↑"], color="#d4eaff"),
+        use_container_width=True, hide_index=True,
+    )
+
+    st.divider()
+
+    # ── ANN Feature Importance ────────────────────────────────────────────────
+    st.subheader("ANN Permutation Feature Importance (Top 10)")
+    st.caption("AUC drop when each feature is randomly shuffled — higher = more important")
+
+    ann_feat_sorted = ANN_FEATURES.sort_values("Importance", ascending=True)
+    fig_ann_feat = go.Figure(go.Bar(
+        x=ann_feat_sorted["Importance"],
+        y=ann_feat_sorted["Feature"],
+        orientation="h",
+        marker_color=COLORS["blue"],
+        marker_line_width=0,
+        text=[f"{v:.4f}" for v in ann_feat_sorted["Importance"]],
+        textposition="outside",
+        hovertemplate="<b>%{y}</b><br>Mean AUC Drop: %{x:.4f}<extra></extra>",
+    ))
+    fig_ann_feat.update_layout(
+        height=360, margin=dict(l=0, r=80, t=10, b=0),
+        xaxis=dict(title="Mean AUC Drop (Importance)"),
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+        font=dict(size=12),
+    )
+    st.plotly_chart(fig_ann_feat, use_container_width=True)
+
+    st.divider()
+
+    # ── ANN Threshold Optimization ────────────────────────────────────────────
+    st.subheader("ANN Threshold Optimization")
+    thresh_col1, thresh_col2, thresh_col3, thresh_col4 = st.columns(4)
+    thresh_col1.metric("Optimal Threshold", "0.43", "maximises F1")
+    thresh_col2.metric("Best F1 Score",     "0.6995")
+    thresh_col3.metric("Recall @ 0.43",     "88.96%", "high recall mode")
+    thresh_col4.metric("Precision @ 0.43",  "57.64%", "vs 62.1% @ 0.50")
+
+    st.info(
+        "Lowering the decision threshold from 0.50 → 0.43 increases **recall** from 77.4% to 88.96% "
+        "(catching more churners), at the cost of precision (62.1% → 57.6%). "
+        "The F1 score improves slightly: 0.6894 → 0.6995. "
+        "Choose threshold based on the business cost of false negatives vs false positives."
+    )
+
+    st.divider()
+
+    # ── Key Findings ──────────────────────────────────────────────────────────
+    st.subheader("Key Findings")
+    st.markdown("""
+- **ANN AUC: 0.7621** — competitive for a lightweight 3-layer network on 90K rows with no balancing
+- **CNN AUC: 0.7656** — 1D convolutions capture local feature patterns, edging the ANN slightly
+- **XGBoost still dominates** (AUC 0.84 on balanced 748-row set) — deep learning with more data converges lower due to the harder, unbalanced problem setup
+- **freight_value** is the top signal for both ML (RFE rank 1) and DL (permutation rank 1)
+- **Delivery timing** (`delivered_estimated`, `purchased_delivered`) ranks 2nd–3rd in ANN importance — not selected by RFE but still informative
+- **Class weights** (0.916 / 1.101) were used instead of under-sampling, allowing the full 90K-row dataset to be trained on
+- **Geolocation** (`geolocation_lat/lng`) enters the top-10 for the ANN — a new signal not available in the ML pipeline
+    """)
+
+# ── Tab 7: Pipeline Summary ────────────────────────────────────────────────────
+
+with tab7:
     st.subheader("ML Pipeline Summary")
 
     steps = [
@@ -486,7 +683,8 @@ with tab6:
         ("5️⃣  Baseline Models (7)",          "Logistic Regression, Decision Tree, Random Forest, KNN (k=3), Naïve Bayes, SVM, XGBoost. Best baseline: XGBoost AUC 0.80."),
         ("6️⃣  RFE Feature Selection",        "Recursive Feature Elimination → 6 top features: freight_value, carrier_delivered, approved_carrier, order_item_id, no_of_products, payment_sequential."),
         ("7️⃣  GridSearchCV Tuning",          "Tuned RF, XGBoost, SVM. Best: XGBoost with lr=0.1, max_depth=3, n_estimators=200."),
-        ("8️⃣  Best Result",                  "Tuned XGBoost — AUC: 0.8267, Accuracy: 82.67%, F1: 0.8194, Kappa: 0.6533, CM: [[65,10],[16,59]]"),
+        ("8️⃣  Best ML Result",              "Tuned XGBoost — AUC: 0.8267, Accuracy: 82.67%, F1: 0.8194, Kappa: 0.6533, CM: [[65,10],[16,59]]"),
+        ("9️⃣  Deep Learning (ANN & CNN)",   "Full 90K-row dataset. 20 features (region-encoded state + payment type OHE). Class weights replace balancing. ANN: AUC 0.7621. CNN: AUC 0.7656. Permutation importance confirms freight_value as top signal."),
     ]
 
     for title, desc in steps:
@@ -498,16 +696,40 @@ with tab6:
     p1, p2, p3, p4, p5 = st.columns(5)
     p1.metric("Raw Dataset",     "9,038 rows",  "after merge & clean")
     p2.metric("Balanced",        "748 rows",    "50/50 balance")
-    p3.metric("Features",        "13",          "no_of_orders dropped")
+    p3.metric("Features (ML)",   "13",          "no_of_orders dropped")
     p4.metric("Training Set",    "598 rows",    "80% split")
     p5.metric("Test Set",        "150 rows",    "20% split")
 
     st.divider()
+    p6, p7, p8 = st.columns(3)
+    p6.metric("DL Dataset",      "90,528 rows", "full, unbalanced")
+    p7.metric("Features (DL)",   "20",          "region + payment OHE")
+    p8.metric("DL Train / Test", "72,422 / 18,106", "80/20 stratified")
+
+    st.divider()
     st.subheader("Notebooks Structure")
     nb_data = {
-        "Notebook": ["01_Data_Loading_and_EDA",  "02_Feature_Engineering_RFM", "03_Preprocessing_Balancing", "04_Model_Training_Evaluation"],
-        "Role":     ["Data Engineer / Analyst",   "Data Scientist",              "ML Engineer",                 "ML Engineer / Lead"],
-        "Output":   ["Merged 95K-row dataset",    "RFM table + churn labels",   "748-row balanced features",   "12 models + best: Tuned XGBoost"],
+        "Notebook": [
+            "01_Data_Loading_and_EDA",
+            "02_Feature_Engineering_RFM",
+            "03_Preprocessing_Balancing",
+            "04_Model_Training_Evaluation",
+            "05_Deep_Learning_ANN_CNN",
+        ],
+        "Role": [
+            "Data Engineer / Analyst",
+            "Data Scientist",
+            "ML Engineer",
+            "ML Engineer / Lead",
+            "DL Engineer",
+        ],
+        "Output": [
+            "Merged 95K-row dataset",
+            "RFM table + churn labels",
+            "748-row balanced features",
+            "12 models + best: Tuned XGBoost (AUC 0.8267)",
+            "ANN (AUC 0.7621) + CNN (AUC 0.7656) on full 90K rows",
+        ],
     }
     st.dataframe(pd.DataFrame(nb_data), use_container_width=True, hide_index=True)
 
@@ -517,7 +739,6 @@ st.divider()
 st.caption(
     "Olist Brazilian E-Commerce Public Dataset · "
     "Churn defined as Frequency = 1 · "
-    "Balanced 50/50 · 80/20 Train/Test · "
-    "No Logistic Regression in final comparison · No KNN k=2 · SVM included · "
-    "Best: Tuned XGBoost (AUC 0.8267)"
+    "ML: Balanced 50/50 · 80/20 Train/Test · Best: Tuned XGBoost (AUC 0.8267) · "
+    "DL: Full 90K rows · Class Weights · ANN AUC 0.7621 · CNN AUC 0.7656"
 )
